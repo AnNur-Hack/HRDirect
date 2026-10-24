@@ -22,9 +22,4 @@
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2"/>
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Templates\" />
-      <Folder Include="Validators\" />
-    </ItemGroup>
-
 </Project>

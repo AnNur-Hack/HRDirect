@@ -7,19 +7,13 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace HRDirectAPI.Helpers;
 
-public class JwtHelper
+public class JwtHelper(IConfiguration configuration)
 {
-    private readonly IConfiguration _configuration;
-
-    public JwtHelper(IConfiguration configuration)
-    {
-        _configuration = configuration;
-    }
-
+    private readonly IConfiguration _configuration = configuration;
     public LoginResponse GenerateJwt(Employee employee)
     {
         var expiryMinutes = int.Parse(
-            _configuration["JWT:ExpirationInMinutes"]!);
+            configuration["JWT:ExpirationInMinutes"]!);
 
         var expiresAt = DateTime.UtcNow.AddMinutes(expiryMinutes);
 
@@ -40,15 +34,15 @@ public class JwtHelper
         }
 
         var key = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(_configuration["JWT:Key"]!));
+            Encoding.UTF8.GetBytes(configuration["JWT:Key"]!));
 
         var credentials = new SigningCredentials(
             key,
             SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(
-            issuer: _configuration["JWT:Issuer"]!,
-            audience: _configuration["JWT:Audience"]!,
+            issuer: configuration["JWT:Issuer"]!,
+            audience: configuration["JWT:Audience"]!,
             claims: claims,
             expires: expiresAt,
             signingCredentials: credentials);
