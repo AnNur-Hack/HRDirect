@@ -1,0 +1,6 @@
+@HRDirectAPI_HostAddress = http://localhost:5029
+
+GET {{HRDirectAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
