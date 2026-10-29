@@ -4,6 +4,7 @@ using HRDirectAPI.Data;
 using HRDirectAPI.Helpers;
 using HRDirectAPI.Repositories.Implementations;
 using HRDirectAPI.Repositories.Interfaces;
+using HRDirectAPI.Services;
 using HRDirectAPI.Services.Implementations;
 using HRDirectAPI.Services.Interfaces;
 using Microsoft.IdentityModel.Tokens;
@@ -30,6 +31,10 @@ builder.Services.AddScoped<JwtHelper>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ILMSService, LMSService>();
+builder.Services.AddScoped<IPayslipService, PayslipService>();
+builder.Services.AddScoped<IKpiService, KpiService>();
+builder.Services.AddScoped<IInternalOpportunityService, InternalOpportunityService>();
+
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

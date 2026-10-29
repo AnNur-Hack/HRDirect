@@ -41,6 +41,28 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<AssignmentResetHistory> AssignmentResetHistories { get; set; }
     
+    public DbSet<Notification> Notifications { get; set; }
+    
+    public DbSet<EmailQueue> EmailQueues { get; set; }
+    
+    public DbSet<KpiPlan> KpiPlans { get; set; }
+
+    public DbSet<KpiItem> KpiItems { get; set; }
+
+    public DbSet<KpiReviewHistory> KpiReviewHistories { get; set; }
+
+    public DbSet<KpiPlanReopenHistory> KpiPlanReopenHistories { get; set; }
+    
+    public DbSet<Payslip> Payslips { get; set; }
+
+    public DbSet<PayslipItem> PayslipItems { get; set; }
+    
+    public DbSet<InternalOpportunity> InternalOpportunities { get; set; }
+
+    public DbSet<OpportunityApplication> OpportunityApplications { get; set; }
+
+    public DbSet<OpportunityApplicationHistory> OpportunityApplicationHistories { get; set; }
+    
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -195,6 +217,42 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<LearningAssignment>()
             .HasIndex(a => new { a.EmployeeId, a.CourseId })
             .IsUnique();
+        
+        modelBuilder.Entity<InternalOpportunity>()
+            .Property(o => o.AllowedDepartments)
+            .HasConversion(
+                departments => string.Join("|", departments),
+                value => string.IsNullOrEmpty(value)
+                    ? new List<string>()
+                    : value.Split('|', StringSplitOptions.RemoveEmptyEntries).ToList());
+
+        modelBuilder.Entity<InternalOpportunity>()
+            .Property(o => o.AllowedGrades)
+            .HasConversion(
+                grades => string.Join("|", grades),
+                value => string.IsNullOrEmpty(value)
+                    ? new List<string>()
+                    : value.Split('|', StringSplitOptions.RemoveEmptyEntries).ToList());
+
+        modelBuilder.Entity<OpportunityApplication>()
+            .HasIndex(a => new
+            {
+                a.InternalOpportunityId,
+                a.EmployeeId
+            })
+            .IsUnique();
+
+        modelBuilder.Entity<InternalOpportunity>()
+            .HasMany(o => o.Applications)
+            .WithOne(a => a.InternalOpportunity)
+            .HasForeignKey(a => a.InternalOpportunityId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<OpportunityApplication>()
+            .HasMany(a => a.History)
+            .WithOne(h => h.OpportunityApplication)
+            .HasForeignKey(h => h.OpportunityApplicationId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
     
 }

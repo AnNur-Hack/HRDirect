@@ -204,70 +204,95 @@ public class LMSService(ApplicationDbContext context) : ILMSService
     public async Task<ApiResponse> AssignCourseAsync(AssignCourseRequest request)
     {
          try
-    {
-        var course = await _context.Courses
-            .FirstOrDefaultAsync(c => c.Id == request.CourseId);
+         {
+             var course = await _context.Courses
+                 .FirstOrDefaultAsync(c => c.Id == request.CourseId);
 
-        if (course == null)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "Course not found.");
-        }
+             if (course == null)
+             {
+                 return ApiResponse.ResponseHelper.FailureResponse(
+                     "Course not found.");
+             }
 
-        if (course.Status != CourseStatus.Published)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "Only published courses can be assigned.");
-        }
+             if (course.Status != CourseStatus.Published)
+             {
+                 return ApiResponse.ResponseHelper.FailureResponse(
+                     "Only published courses can be assigned.");
+             }
 
-        if (request.DueDateUtc <= DateTime.UtcNow)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "The due date must be in the future.");
-        }
+             if (request.DueDateUtc <= DateTime.UtcNow)
+             {
+                 return ApiResponse.ResponseHelper.FailureResponse(
+                     "The due date must be in the future.");
+             }
 
-        var employeeExists = await _context.Employees
-            .AnyAsync(e => e.Id == request.EmployeeId);
+             var employee = await _context.Employees
+                 .FirstOrDefaultAsync(e => e.Id == request.EmployeeId);
 
-        if (!employeeExists)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "Employee not found.");
-        }
+             if (employee == null)
+             {
+                 return ApiResponse.ResponseHelper.FailureResponse(
+                     "Employee not found.");
+             }
 
-        var alreadyAssigned = await _context.LearningAssignments
-            .AnyAsync(a =>
-                a.CourseId == request.CourseId &&
-                a.EmployeeId == request.EmployeeId);
+             var alreadyAssigned = await _context.LearningAssignments
+                 .AnyAsync(a =>
+                     a.CourseId == request.CourseId &&
+                     a.EmployeeId == request.EmployeeId);
 
-        if (alreadyAssigned)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "This course has already been assigned to the employee.");
-        }
+             if (alreadyAssigned)
+             {
+                 return ApiResponse.ResponseHelper.FailureResponse(
+                     "This course has already been assigned to the employee.");
+             }
 
-        var assignment = new LearningAssignment
-        {
-            CourseId = request.CourseId,
-            EmployeeId = request.EmployeeId,
-            DueDateUtc = request.DueDateUtc,
-            AssignedAtUtc = DateTime.UtcNow,
-            Status = LearningAssignmentStatus.NotStarted,
-            CurrentCycle = 1
-        };
+             var assignment = new LearningAssignment
+             {
+                 CourseId = request.CourseId,
+                 EmployeeId = request.EmployeeId,
+                 DueDateUtc = request.DueDateUtc,
+                 AssignedAtUtc = DateTime.UtcNow,
+                 Status = LearningAssignmentStatus.NotStarted,
+                 CurrentCycle = 1
+             };
 
-        await _context.LearningAssignments.AddAsync(assignment);
-        await _context.SaveChangesAsync();
+             await _context.LearningAssignments.AddAsync(assignment);
+             await _context.LearningAssignments.AddAsync(assignment);
 
-        return ApiResponse.ResponseHelper.SuccessResponse(
-            assignment,
-            "Course assigned successfully.");
-    }
-    catch (Exception)
-    {
-        return ApiResponse.ResponseHelper.FailureResponse(
-            "An error occurred while assigning the course.");
-    }
+             var notification = new Notification
+             {
+                 EmployeeId = request.EmployeeId,
+                 Title = "New Learning Assignment",
+                 Message = $"You have been assigned a new course: {course.Title}.",
+                 IsRead = false,
+                 CreatedAtUtc = DateTime.UtcNow
+             };
+
+             await _context.Notifications.AddAsync(notification);
+             
+             var emailQueue = new EmailQueue
+             {
+                 RecipientEmail = employee.Email,
+                 Subject = "New Learning Assignment",
+                 Body = $"You have been assigned the course '{course.Title}'. " +
+                        $"Please log in to the employee portal to begin your training.",
+                 IsSent = false,
+                 CreatedAtUtc = DateTime.UtcNow
+             };
+
+             await _context.EmailQueues.AddAsync(emailQueue);
+
+             await _context.SaveChangesAsync();
+
+             return ApiResponse.ResponseHelper.SuccessResponse(
+                 assignment,
+                 "Course assigned successfully.");
+         }
+         catch (Exception)
+         {
+             return ApiResponse.ResponseHelper.FailureResponse(
+                 "An error occurred while assigning the course.");
+         }
     }
 
     public async Task<ApiResponse> GetMyAssignmentsAsync(int employeeId)
@@ -382,179 +407,179 @@ public class LMSService(ApplicationDbContext context) : ILMSService
     public async Task<ApiResponse> SubmitAssessmentAsync(int assignmentId, SubmitAssessmentRequest request, int employeeId)
     {
             try
-    {
-        var assignment = await _context.LearningAssignments
-            .Include(a => a.Course)
-                .ThenInclude(c => c.Questions)
+            {
+                var assignment = await _context.LearningAssignments
+                    .Include(a => a.Course)
+                    .ThenInclude(c => c.Questions)
                     .ThenInclude(q => q.Options)
-            .Include(a => a.LessonCompletions)
-            .Include(a => a.AssessmentAttempts)
-            .FirstOrDefaultAsync(a =>
-                a.Id == assignmentId &&
-                a.EmployeeId == employeeId);
+                    .Include(a => a.LessonCompletions)
+                    .Include(a => a.AssessmentAttempts)
+                    .FirstOrDefaultAsync(a =>
+                        a.Id == assignmentId &&
+                        a.EmployeeId == employeeId);
 
-        if (assignment == null)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "Assignment not found.");
-        }
+                if (assignment == null)
+                {
+                    return ApiResponse.ResponseHelper.FailureResponse(
+                        "Assignment not found.");
+                }
 
-        if (assignment.Status == LearningAssignmentStatus.Completed)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "This assignment has already been completed.");
-        }
+                if (assignment.Status == LearningAssignmentStatus.Completed)
+                {
+                    return ApiResponse.ResponseHelper.FailureResponse(
+                        "This assignment has already been completed.");
+                }
 
-        if (assignment.Status == LearningAssignmentStatus.AttemptsExhausted)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "You have exhausted your attempts. Contact HR for a reset.");
-        }
+                if (assignment.Status == LearningAssignmentStatus.AttemptsExhausted)
+                {
+                    return ApiResponse.ResponseHelper.FailureResponse(
+                        "You have exhausted your attempts. Contact HR for a reset.");
+                }
 
-        var questions = assignment.Course.Questions.ToList();
+                var questions = assignment.Course.Questions.ToList();
 
-        if (questions.Count == 0)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "This course has no assessment questions.");
-        }
+                if (questions.Count == 0)
+                {
+                    return ApiResponse.ResponseHelper.FailureResponse(
+                        "This course has no assessment questions.");
+                }
 
-        var totalLessons = await _context.Lessons
-            .CountAsync(l => l.CourseId == assignment.CourseId);
+                var totalLessons = await _context.Lessons
+                    .CountAsync(l => l.CourseId == assignment.CourseId);
 
-        if (assignment.LessonCompletions.Count < totalLessons)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "Complete all lessons before taking the assessment.");
-        }
+                if (assignment.LessonCompletions.Count < totalLessons)
+                {
+                    return ApiResponse.ResponseHelper.FailureResponse(
+                        "Complete all lessons before taking the assessment.");
+                }
 
-        if (request.Answers == null ||
-            request.Answers.Count != questions.Count)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "You must submit exactly one answer for every question.");
-        }
+                if (request.Answers == null ||
+                    request.Answers.Count != questions.Count)
+                {
+                    return ApiResponse.ResponseHelper.FailureResponse(
+                        "You must submit exactly one answer for every question.");
+                }
 
-        var duplicateQuestions = request.Answers
-            .GroupBy(a => a.QuestionId)
-            .Any(g => g.Count() > 1);
+                var duplicateQuestions = request.Answers
+                    .GroupBy(a => a.QuestionId)
+                    .Any(g => g.Count() > 1);
 
-        if (duplicateQuestions)
-        {
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "A question cannot be answered more than once.");
-        }
+                if (duplicateQuestions)
+                {
+                    return ApiResponse.ResponseHelper.FailureResponse(
+                        "A question cannot be answered more than once.");
+                }
 
-        foreach (var answer in request.Answers)
-        {
-            var question = questions.FirstOrDefault(q =>
-                q.Id == answer.QuestionId);
+                foreach (var answer in request.Answers)
+                {
+                    var question = questions.FirstOrDefault(q =>
+                        q.Id == answer.QuestionId);
 
-            if (question == null)
+                    if (question == null)
+                    {
+                        return ApiResponse.ResponseHelper.FailureResponse(
+                            "An answer contains an invalid question.");
+                    }
+
+                    var optionBelongsToQuestion = question.Options
+                        .Any(o => o.Id == answer.SelectedOptionId);
+
+                    if (!optionBelongsToQuestion)
+                    {
+                        return ApiResponse.ResponseHelper.FailureResponse(
+                            "A selected option does not belong to its question.");
+                    }
+                }
+
+                var attemptsUsed = assignment.AssessmentAttempts
+                    .Count(a => a.CycleNumber == assignment.CurrentCycle);
+
+                if (attemptsUsed >= 3)
+                {
+                    assignment.Status = LearningAssignmentStatus.AttemptsExhausted;
+                    await _context.SaveChangesAsync();
+
+                    return ApiResponse.ResponseHelper.FailureResponse(
+                        "You have exhausted your attempts. Contact HR for a reset.");
+                }
+
+                var correctAnswers = 0;
+
+                foreach (var answer in request.Answers)
+                {
+                    var question = questions.First(q =>
+                        q.Id == answer.QuestionId);
+
+                    var selectedOption = question.Options.First(o =>
+                        o.Id == answer.SelectedOptionId);
+
+                    if (selectedOption.IsCorrect)
+                    {
+                        correctAnswers++;
+                    }
+                }
+
+                var score = (decimal)correctAnswers / questions.Count * 100;
+
+                var isPassed = score >= assignment.Course.PassMark;
+
+                var attempt = new AssessmentAttempt
+                {
+                    LearningAssignmentId = assignment.Id,
+                    AttemptNumber = attemptsUsed + 1,
+                    CycleNumber = assignment.CurrentCycle,
+                    Score = score,
+                    IsPassed = isPassed,
+                    AttemptedAtUtc = DateTime.UtcNow
+                };
+
+                await _context.AssessmentAttempts.AddAsync(attempt);
+
+                if (assignment.BestScore == null ||
+                    score > assignment.BestScore.Value)
+                {
+                    assignment.BestScore = score;
+                }
+
+                if (isPassed)
+                {
+                    assignment.Status = LearningAssignmentStatus.Completed;
+                    assignment.CompletedAtUtc = DateTime.UtcNow;
+                }
+                else if (attemptsUsed + 1 >= 3)
+                {
+                    assignment.Status = LearningAssignmentStatus.AttemptsExhausted;
+                }
+                else
+                {
+                    assignment.Status = LearningAssignmentStatus.InProgress;
+                }
+
+                await _context.SaveChangesAsync();
+
+                var result = new AssessmentResultResponse
+                {
+                    AssignmentId = assignment.Id,
+                    Score = score,
+                    IsPassed = isPassed,
+                    AttemptNumber = attemptsUsed + 1,
+                    AttemptsRemaining = isPassed ? 0 : Math.Max(0, 3 - (attemptsUsed + 1)),
+                    Status = assignment.Status.ToString()
+                };
+
+                return ApiResponse.ResponseHelper.SuccessResponse(
+                    result,
+                    isPassed
+                        ? "Congratulations! You passed the assessment."
+                        : assignment.Status == LearningAssignmentStatus.AttemptsExhausted
+                            ? "You did not pass and have exhausted your attempts. Contact HR for a reset."
+                            : "Assessment submitted. You may try again.");
+            }
+            catch (Exception)
             {
                 return ApiResponse.ResponseHelper.FailureResponse(
-                    "An answer contains an invalid question.");
+                    "An error occurred while submitting the assessment.");
             }
-
-            var optionBelongsToQuestion = question.Options
-                .Any(o => o.Id == answer.SelectedOptionId);
-
-            if (!optionBelongsToQuestion)
-            {
-                return ApiResponse.ResponseHelper.FailureResponse(
-                    "A selected option does not belong to its question.");
-            }
-        }
-
-        var attemptsUsed = assignment.AssessmentAttempts
-            .Count(a => a.CycleNumber == assignment.CurrentCycle);
-
-        if (attemptsUsed >= 3)
-        {
-            assignment.Status = LearningAssignmentStatus.AttemptsExhausted;
-            await _context.SaveChangesAsync();
-
-            return ApiResponse.ResponseHelper.FailureResponse(
-                "You have exhausted your attempts. Contact HR for a reset.");
-        }
-
-        var correctAnswers = 0;
-
-        foreach (var answer in request.Answers)
-        {
-            var question = questions.First(q =>
-                q.Id == answer.QuestionId);
-
-            var selectedOption = question.Options.First(o =>
-                o.Id == answer.SelectedOptionId);
-
-            if (selectedOption.IsCorrect)
-            {
-                correctAnswers++;
-            }
-        }
-
-        var score = (decimal)correctAnswers / questions.Count * 100;
-
-        var isPassed = score >= assignment.Course.PassMark;
-
-        var attempt = new AssessmentAttempt
-        {
-            LearningAssignmentId = assignment.Id,
-            AttemptNumber = attemptsUsed + 1,
-            CycleNumber = assignment.CurrentCycle,
-            Score = score,
-            IsPassed = isPassed,
-            AttemptedAtUtc = DateTime.UtcNow
-        };
-
-        await _context.AssessmentAttempts.AddAsync(attempt);
-
-        if (assignment.BestScore == null ||
-            score > assignment.BestScore.Value)
-        {
-            assignment.BestScore = score;
-        }
-
-        if (isPassed)
-        {
-            assignment.Status = LearningAssignmentStatus.Completed;
-            assignment.CompletedAtUtc = DateTime.UtcNow;
-        }
-        else if (attemptsUsed + 1 >= 3)
-        {
-            assignment.Status = LearningAssignmentStatus.AttemptsExhausted;
-        }
-        else
-        {
-            assignment.Status = LearningAssignmentStatus.InProgress;
-        }
-
-        await _context.SaveChangesAsync();
-
-        var result = new AssessmentResultResponse
-        {
-            AssignmentId = assignment.Id,
-            Score = score,
-            IsPassed = isPassed,
-            AttemptNumber = attemptsUsed + 1,
-            AttemptsRemaining = isPassed ? 0 : Math.Max(0, 3 - (attemptsUsed + 1)),
-            Status = assignment.Status.ToString()
-        };
-
-        return ApiResponse.ResponseHelper.SuccessResponse(
-            result,
-            isPassed
-                ? "Congratulations! You passed the assessment."
-                : assignment.Status == LearningAssignmentStatus.AttemptsExhausted
-                    ? "You did not pass and have exhausted your attempts. Contact HR for a reset."
-                    : "Assessment submitted. You may try again.");
-    }
-    catch (Exception)
-    {
-        return ApiResponse.ResponseHelper.FailureResponse(
-            "An error occurred while submitting the assessment.");
-    }
     }
 
     public async Task<ApiResponse> ResetAssignmentAsync(ResetAssignmentRequest request, int hrEmployeeId)
